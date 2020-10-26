@@ -1,0 +1,120 @@
+
+--STATUS TABLE
+IF OBJECT_ID('STATUS') IS NOT NULL
+	DROP TABLE STATUS;
+GO
+
+CREATE TABLE STATUS 
+(
+	Status_id nvarchar(20),
+	Status_name nvarchar(20),
+	CONSTRAINT S_PK PRIMARY KEY(Status_id)
+);
+
+--ORDER TABLE
+IF OBJECT_ID('ORDERS') IS NOT NULL
+	DROP TABLE ORDERS;
+GO
+
+CREATE TABLE ORDERS 
+(
+	Order_id nvarchar(20),
+	Buyer_name nvarchar(20),
+	Status_id nvarchar(20),
+	Shipping_address nvarchar(20),
+	DATELOADED DATETIME DEFAULT GETDATE(),
+	CONSTRAINT OID_PK PRIMARY KEY(Order_id),
+	CONSTRAINT SID_FK FOREIGN KEY(Status_id) REFERENCES Status(Status_id)
+);
+
+--PRODUCT TABLE
+IF OBJECT_ID('PRODUCT') IS NOT NULL
+	DROP TABLE PRODUCT;
+GO
+
+CREATE TABLE PRODUCT 
+(
+	Product_id nvarchar(20),
+	Product_name nvarchar(20),
+	Product_weight nvarchar(20),
+	Product_height int,
+	Product_stock nvarchar(20),
+	Product_barcode nvarchar(20),
+	Product_image varbinary(max),
+	DATELOADED  DATETIME,
+	CONSTRAINT PID_PK PRIMARY KEY(Product_id)
+);
+
+--ORDER_ITEMS
+IF OBJECT_ID('ORDER_ITEMS') IS NOT NULL
+	DROP TABLE ORDER_ITEMS;
+GO
+
+CREATE TABLE ORDER_ITEMS 
+(
+	Order_item_id nvarchar(20), 
+	Order_id nvarchar(20), 
+	Product_id nvarchar(20),
+	Quantity int,
+	dateloaded datetime,
+	CONSTRAINT OTID_PK PRIMARY KEY(Order_item_id),
+	CONSTRAINT OID_FK FOREIGN KEY(Order_id) REFERENCES Orders(Order_id),
+	CONSTRAINT PTID_FK FOREIGN KEY(Product_id) REFERENCES Product(Product_id)
+);
+
+
+IF OBJECT_ID('ORDER_AUDIT_HISTORY') IS NOT NULL
+	DROP TABLE ORDER_AUDIT_HISTORY;
+GO
+
+CREATE TABLE ORDER_AUDIT_HISTORY
+(
+	Order_id nvarchar(20),
+	Buyer_name_OLD nvarchar(20),
+	Buyer_name_NEW nvarchar(20),
+	Status_id_OLD nvarchar(20),
+	Status_id_NEW nvarchar(20),
+	Shipping_address_OLD nvarchar(20),
+	Shipping_address_NEW nvarchar(20),
+	AuditOperation varchar(10),
+	Dateloaded_OLD	DATETIME,
+	Dateloaded_NEW DATETIME
+);
+
+IF OBJECT_ID('ORDER_ITEMS_AUDIT_HISTORY') IS NOT NULL
+	DROP TABLE ORDER_ITEMS_AUDIT_HISTORY;
+GO
+
+CREATE TABLE ORDER_ITEMS_AUDIT_HISTORY
+(	
+	Order_item_id nvarchar(20), 
+	Order_id nvarchar(20), 
+	Product_id nvarchar(20),
+	Quantity_Old int,
+	Quantity_New int,
+	AuditOperation varchar(50),
+	dateloaded_Old datetime,
+    dateloaded_New datetime,
+);
+
+--PRODUCT TABLE
+IF OBJECT_ID('PRODUCT_AUDIT_HISTORY') IS NOT NULL
+	DROP TABLE PRODUCT_AUDIT_HISTORY;
+GO
+
+CREATE TABLE PRODUCT_AUDIT_HISTORY
+(
+	Product_id nvarchar(20),
+	Product_name_NEW nvarchar(20),
+	Product_name_OLD nvarchar(20),
+	Product_weight_NEW nvarchar(20),
+	Product_weight_OLD nvarchar(20),
+	Product_height_NEW int,
+	Product_height_OLD int,
+	Product_stock_NEW nvarchar(20),
+	Product_stock_OLD nvarchar(20),
+	AuditOperation varchar(50),
+	DATELOADED_NEW  DATETIME,
+	DATELOADED_OLD  DATETIME
+);
+

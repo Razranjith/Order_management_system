@@ -1,0 +1,26 @@
+--INSERTING IMAGE VALUES INTO PRODUCT TABLE
+--CREATING TEMP TABLE PRODUCT_LIST
+
+IF OBJECT_ID('tempdb..#TEMP_PRODUCT') IS NOT NULL
+		DROP TABLE #TEMP_PRODUCT;
+CREATE TABLE #TEMP_PRODUCT
+	(
+		Product_id nvarchar(20),
+		Product_name nvarchar(20),
+		Product_weight nvarchar(20),
+		Product_height int,
+		Product_stock nvarchar(20),
+		Product_barcode nvarchar(20),
+		Product_image varbinary(max),
+		DATELOADED  DATETIME
+);
+
+INSERT INTO [dbo].[#TEMP_PRODUCT] (Product_id,Product_name,Product_weight,Product_height,Product_stock,DATELOADED,Product_barcode,Product_image)
+SELECT 'PRD010','BISCUITS','200gm','20','30',GETDATE(),'',
+BulkColumn FROM OPENROWSET(BULK N'D:\Health Care Logistics Database\biscuit.png', SINGLE_BLOB) image;
+
+--INSERTING BARCODE VALUES INTO PRODUCT TABLE
+
+select Product_id,Product_name,Product_weight,Product_height,Product_stock,DATELOADED,dbo.EncodeCode128Auto(Product_id) as Product_barcode,Product_image 
+INTO PRODUCT
+from #TEMP_PRODUCT;

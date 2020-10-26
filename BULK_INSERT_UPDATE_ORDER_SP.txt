@@ -1,0 +1,92 @@
+IF OBJECT_ID('DBO.PR_ADD_UPDATE_ORDER_TABLES') IS NOT NULL
+
+DROP PROCEDURE DBO.PR_ADD_UPDATE_ORDER_TABLES
+GO
+
+CREATE PROCEDURE DBO.PR_ADD_UPDATE_ORDER_TABLES
+AS
+BEGIN
+
+	IF OBJECT_ID('tempdb..#ORDER_DETAILS') IS NOT NULL
+	DROP TABLE #ORDER_DETAILS
+
+	CREATE TABLE #ORDER_DETAILS
+	(
+		Order_id VARCHAR(50),
+		Buyer_name VARCHAR(100),
+		Status_NAME VARCHAR(50),
+		Shipping_address  VARCHAR(MAX),
+		Product_id VARCHAR(50),
+		Quantity INT
+	)
+
+	BULK INSERT #ORDER_DETAILS FROM 'C:\BULK_INSERT\FILE.txt' WITH (FIRSTROW = 2,FIELDTERMINATOR = '|', ROWTERMINATOR='\n')
+
+	--BULK INSERT 
+
+	--ORDER TABLE
+	INSERT INTO ORDERS
+	(Order_id,Buyer_name,Status_id,Shipping_address,DATELOADED)
+
+	SELECT OD.Order_id
+	,OD.Buyer_name
+	,S.Status_id
+	,OD.Shipping_address
+	,GETDATE()
+
+	FROM #ORDER_DETAILS OD 
+	LEFT JOIN ORDERS O ON OD.Order_id=O.Order_id
+	INNER JOIN STATUS S ON OD.Status_NAME = S.Status_name
+	WHERE O.Order_id IS NULL
+
+	----ORDER ITEMS TABLE
+	INSERT INTO ORDER_ITEMS
+	(Order_item_id,Order_id,Product_Id,Quantity,DATELOADED)
+
+	SELECT OD.Order_id+'_'+OD.Product_id
+	,OD.Order_id
+	,OD.Product_id
+	,OD.Quantity
+	,GETDATE()
+
+	FROM #ORDER_DETAILS OD 
+	LEFT JOIN ORDER_ITEMS O ON O.Order_item_id= OD.Order_id+'_'+OD.Product_id
+	INNER JOIN STATUS S ON OD.Status_NAME = S.Status_name
+	WHERE O.Order_item_id IS NULL
+
+	UPDATE PROD SET PROD.Product_stock = PROD.Product_stock - O.Quantity
+	FROM PRODUCT PROD
+	INNER JOIN ( SELECT OD.Product_id,SUM(OD.Quantity) AS Quantity FROM #ORDER_DETAILS OD 
+				 LEFT JOIN ORDER_ITEMS O ON O.Order_item_id= OD.Order_id+'_'+OD.Product_id
+				 INNER JOIN STATUS S ON OD.Status_NAME = S.Status_name
+				 WHERE O.Order_item_id IS NULL
+				 GROUP BY OD.Product_id 
+			   ) O ON O.Product_id= PROD.Product_id
+
+
+	--BULK UPDATE 
+
+	--ORDER TABLE
+	UPDATE O SET O.Buyer_name=OD.Buyer_name,O.Status_id=S.Status_id,O.Shipping_address=OD.Shipping_address,O.DATELOADED=GETDATE()
+	FROM  ORDERS O
+	INNER JOIN #ORDER_DETAILS OD ON OD.Order_id=O.Order_id
+	INNER JOIN STATUS S ON OD.Status_NAME = S.Status_name
+
+	UPDATE PROD SET PROD.Product_stock = PROD.Product_stock - O.Quantity
+	FROM PRODUCT PROD
+	INNER JOIN ( SELECT OD.Product_id,SUM(OD.Quantity - O.Quantity) AS Quantity FROM #ORDER_DETAILS OD 
+				 INNER JOIN ORDER_ITEMS O ON O.Order_item_id= OD.Order_id+'_'+OD.Product_id
+				 INNER JOIN STATUS S ON OD.Status_NAME = S.Status_name
+				 WHERE O.Order_item_id IS NULL
+				 GROUP BY OD.Product_id 
+			   ) O ON O.Product_id= PROD.Product_id
+
+	----ORDER ITEMS TABLE
+	UPDATE O SET O.Quantity=OD.Quantity, O.DATELOADED=GETDATE()
+	FROM ORDER_ITEMS O
+	INNER JOIN #ORDER_DETAILS OD ON O.Order_item_id= OD.Order_id+'_'+OD.Product_id
+
+	EXEC [DBO].[PR_ADD_UPDATE_AUDIT_HISTORY_TABLES];
+
+END
+

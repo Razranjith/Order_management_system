@@ -1,0 +1,17 @@
+
+CREATE FUNCTION dbo.fn_SalesSecurity(@UserName AS sysname)
+    RETURNS TABLE
+WITH SCHEMABINDING
+AS
+    RETURN SELECT 1 AS fn_SalesSecurity_Result
+    -- Logic for filter predicate
+    WHERE @UserName = USER_NAME() 
+    OR USER_NAME() = 'ADMINISTRATOR';
+GO
+
+CREATE SECURITY POLICY UserFilter
+ADD FILTER PREDICATE dbo.fn_SalesSecurity(BUYER_NAME) 
+ON dbo.ORDERS
+WITH (STATE = ON);
+GO
+

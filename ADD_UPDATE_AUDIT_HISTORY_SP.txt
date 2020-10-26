@@ -1,0 +1,456 @@
+
+
+IF OBJECT_ID('DBO.PR_ADD_UPDATE_AUDIT_HISTORY_TABLES') IS NOT NULL
+DROP PROCEDURE  DBO.PR_ADD_UPDATE_AUDIT_HISTORY_TABLES
+GO
+
+CREATE PROCEDURE DBO.PR_ADD_UPDATE_AUDIT_HISTORY_TABLES
+AS
+BEGIN
+
+
+	IF OBJECT_ID('tempdb..#TEMP_ORDER') IS NOT NULL
+		DROP TABLE #TEMP_ORDER;
+
+	IF OBJECT_ID('tempdb..#TEMP_ORDER_AUDIT_HISTORY') IS NOT NULL
+		DROP TABLE #TEMP_ORDER_AUDIT_HISTORY;
+
+	IF OBJECT_ID('tempdb..#TEMP_ORDER_ITEMS') IS NOT NULL
+		DROP TABLE #TEMP_ORDER_ITEMS;
+
+	IF OBJECT_ID('tempdb..#TEMP_ORDER_ITEMS_AUDIT_HISTORY') IS NOT NULL
+		DROP TABLE #TEMP_ORDER_ITEMS_AUDIT_HISTORY;
+	
+	IF OBJECT_ID('tempdb..#TEMP_PRODUCT') IS NOT NULL
+		DROP TABLE #TEMP_PRODUCT;
+
+	IF OBJECT_ID('tempdb..#TEMP_PRODUCT_AUDIT_HISTORY') IS NOT NULL
+		DROP TABLE #TEMP_PRODUCT_AUDIT_HISTORY;	
+	
+	-- TO AVOID FETCHING THE DATA FROM MAIN TABLE FOR AUDIT OPERATION, THE TEMPORARY TABLES ARE CREATED
+
+	CREATE TABLE #TEMP_PRODUCT_AUDIT_HISTORY
+	(
+		Product_id nvarchar(20),
+		Product_name_NEW nvarchar(20),
+		Product_name_OLD nvarchar(20),
+		Product_weight_NEW nvarchar(20),
+		Product_weight_OLD nvarchar(20),
+		Product_height_NEW int,
+		Product_height_OLD int,
+		Product_stock_NEW nvarchar(20),
+		Product_stock_OLD nvarchar(20),
+		AuditOperation varchar(50),
+		DATELOADED_NEW  DATETIME,
+		DATELOADED_OLD  DATETIME
+	);
+
+	CREATE TABLE #TEMP_PRODUCT
+	(
+		Product_id nvarchar(20),
+		Product_name nvarchar(20),
+		Product_weight nvarchar(20),
+		Product_height int,
+		Product_stock nvarchar(20),
+		Product_barcode nvarchar(20),
+		Product_image varbinary(max),
+		DATELOADED  DATETIME,
+	);
+	CREATE TABLE #TEMP_ORDER_ITEMS_AUDIT_HISTORY
+	(
+		Order_item_id nvarchar(20), 
+		Order_id nvarchar(20), 
+		Product_id nvarchar(20),
+		Quantity_Old int,
+		Quantity_New int,
+		AuditOperation varchar(max),
+		dateloaded_Old datetime,
+		dateloaded_New datetime,
+	);
+
+	CREATE TABLE #TEMP_ORDER_ITEMS
+	(
+		Order_item_id nvarchar(20), 
+		Order_id nvarchar(20), 
+		Product_id nvarchar(20),
+		Quantity int,
+		dateloaded datetime
+	);
+
+	CREATE TABLE #TEMP_ORDER_AUDIT_HISTORY
+	(
+		Order_id nvarchar(20),
+		Buyer_name_OLD nvarchar(20),
+		Buyer_name_NEW nvarchar(20),
+		Status_id_OLD nvarchar(20),
+		Status_id_NEW nvarchar(20),
+		Shipping_address_OLD nvarchar(20),
+		Shipping_address_NEW nvarchar(20),
+		[AuditOperation] varchar(10),
+		Dateloaded_OLD	DATETIME,
+		Dateloaded_NEW DATETIME
+	);
+
+	CREATE TABLE #TEMP_ORDER
+	(
+		Order_id nvarchar(20),
+		Buyer_name nvarchar(20),
+		Status_id nvarchar(20),
+		Shipping_address nvarchar(20),
+		dateLoaded datetime
+	);
+
+	--********************************* PRODUCT AUDIT_HISTORY TABLE******************************
+	
+	-- INSERT VALUES INTO TEMPORARY TABLE FROM MAIN TABLE----------
+	INSERT INTO #TEMP_PRODUCT_AUDIT_HISTORY
+	(	  [Product_id]
+		  ,[Product_name_NEW]
+		  ,[Product_name_OLD]
+		  ,[Product_weight_NEW]
+		  ,[Product_weight_OLD]
+		  ,[Product_height_NEW]
+		  ,[Product_height_OLD]
+		  ,[Product_stock_NEW]
+		  ,[Product_stock_OLD]
+		  ,[AuditOperation]
+		  ,[DATELOADED_NEW]
+		  ,[DATELOADED_OLD]
+	)
+
+	SELECT 
+		  [Product_id]
+		  ,[Product_name_NEW]
+		  ,[Product_name_OLD]
+		  ,[Product_weight_NEW]
+		  ,[Product_weight_OLD]
+		  ,[Product_height_NEW]
+		  ,[Product_height_OLD]
+		  ,[Product_stock_NEW]
+		  ,[Product_stock_OLD]
+		  ,[AuditOperation]
+		  ,[DATELOADED_NEW]
+		  ,[DATELOADED_OLD]
+	FROM PRODUCT_AUDIT_HISTORY O
+
+	INSERT INTO #TEMP_PRODUCT
+	(	 [Product_id]
+		  ,[Product_name]
+		  ,[Product_weight]
+		  ,[Product_height]
+		  ,[Product_stock]
+		  ,[Product_barcode]
+		  ,[Product_image]
+		  ,[DATELOADED]
+	)
+
+	SELECT 
+		 [Product_id]
+		  ,[Product_name]
+		  ,[Product_weight]
+		  ,[Product_height]
+		  ,[Product_stock]
+		  ,[Product_barcode]
+		  ,[Product_image]
+		  ,[DATELOADED]
+	FROM PRODUCT O
+
+	--INSERT SCENARIO --  PRODUCT_AUDIT_HISTORY TABLE
+
+	INSERT INTO PRODUCT_AUDIT_HISTORY
+	(
+		  [Product_id]
+		  ,[Product_name_NEW]
+		  ,[Product_weight_NEW]
+		  ,[Product_height_NEW]
+		  ,[Product_stock_NEW]
+		   ,[DATELOADED_NEW]
+		  ,[AuditOperation]   
+
+	)
+	SELECT 
+		  o.[Product_id]
+		  ,[Product_name]
+		  ,[Product_weight]
+		  ,[Product_height]
+		  ,[Product_stock]
+		  ,[DATELOADED]
+		  ,'INSERT' as [AuditOperation]
+
+	FROM #TEMP_PRODUCT O
+	LEFT JOIN #TEMP_PRODUCT_AUDIT_HISTORY OAH ON O.[Product_id] =OAH.[Product_id]  
+	WHERE  OAH.[Product_id] IS NULL
+
+	--UPDATE SCENARIO --  PRODUCT_AUDIT_HISTORY TABLE
+
+	--TO GET ALL THE RECORDS FROM TEMP TABLE BASED ON DATE LOADED NEW COLUMN (GENERATING ROWNUMBER FOR LATEST RECORDS)
+	;WITH CTE_ALL
+	AS
+	(
+	SELECT ROW_NUMBER() OVER(PARTITION BY [Product_id] ORDER BY Dateloaded_OLD,Dateloaded_NEW DESC)AS RN
+	,* FROM #TEMP_PRODUCT_AUDIT_HISTORY )
+
+	insert into PRODUCT_AUDIT_HISTORY
+	(	  
+		   [Product_id]
+		  ,[Product_name_NEW]
+		  ,[Product_name_OLD]
+		  ,[Product_weight_NEW]
+		  ,[Product_weight_OLD]
+		  ,[Product_height_NEW]
+		  ,[Product_height_OLD]
+		  ,[Product_stock_NEW]
+		  ,[Product_stock_OLD]
+		  ,[AuditOperation]
+		  ,[DATELOADED_NEW]
+		  ,[DATELOADED_OLD]
+	)
+
+	SELECT  
+		   O.[Product_id]
+		  ,[Product_name]
+		  ,[Product_name_NEW]
+		  ,[Product_weight]
+		  ,[Product_weight_NEW]
+		  ,[Product_height]
+		  ,[Product_height_NEW]
+		  ,[Product_stock]
+		  ,[Product_stock_NEW]
+		  ,'Update' as [AuditOperation]	
+		  ,Dateloaded
+		  ,Dateloaded_NEW
+	FROM CTE_ALL c
+	inner join #TEMP_PRODUCT O ON O.[Product_id] = c.[Product_id] 
+	WHERE c.rn=1 and
+	(	    [Product_name] <> [Product_name_NEW] OR
+		  [Product_weight] <> [Product_weight_NEW] OR
+		   [Product_height] <> [Product_height_NEW] OR
+		  [Product_stock] <> [Product_stock_NEW] OR
+		  Dateloaded_NEW  <> Dateloaded
+	)
+
+
+	---************************ END OF PRODUCT_AUDIT_HISTORY TABLE******************************************
+
+	--******************************ORDER_AUDIT_HISTORY TABLE**********************************************
+
+	
+	INSERT INTO #TEMP_ORDER_AUDIT_HISTORY
+	(	   [Order_id]
+		  ,[Buyer_name_OLD]
+		  ,[Buyer_name_NEW]
+		  ,[Status_id_OLD]
+		  ,[Status_id_NEW]
+		  ,[Shipping_address_OLD]
+		  ,[Shipping_address_NEW]
+		  ,[AuditOperation]
+		  ,Dateloaded_OLD	
+		  ,Dateloaded_NEW
+	)
+
+	SELECT 
+		   [Order_id]
+		  ,[Buyer_name_OLD]
+		  ,[Buyer_name_NEW]
+		  ,[Status_id_OLD]
+		  ,[Status_id_NEW]
+		  ,[Shipping_address_OLD]
+		  ,[Shipping_address_NEW]
+		  ,[AuditOperation]
+		  ,Dateloaded_OLD	
+		  ,Dateloaded_NEW
+	FROM ORDER_AUDIT_HISTORY O
+
+	INSERT INTO #TEMP_ORDER
+	(	   [Order_id]
+		  ,[Buyer_name]
+		  ,[Status_id]
+		  ,[Shipping_address]
+		  ,dateLoaded
+	)
+
+	SELECT 
+		   [Order_id]
+		  ,[Buyer_name]
+		  ,[Status_id]
+		  ,[Shipping_address]
+		  ,dateLoaded
+	FROM ORDERS O
+
+	----INSERT SCENARIO --  ORDER_AUDIT_HISTORY TABLE
+
+	INSERT INTO ORDER_AUDIT_HISTORY
+	(
+		   [Order_id]
+		  ,[Buyer_name_NEW]
+		  ,[Status_id_NEW]
+		  ,[Shipping_address_NEW]
+		  ,[AuditOperation]	
+		  ,Dateloaded_NEW
+	)
+	SELECT 
+		   O.[Order_id]
+		  ,[Buyer_name]
+		  ,[Status_id]
+		  ,[Shipping_address]
+		  ,'Insert' as [AuditOperation]
+		  ,Dateloaded
+	FROM #TEMP_ORDER O
+	LEFT JOIN #TEMP_ORDER_AUDIT_HISTORY  OAH ON O.Order_id =OAH.Order_id   AND AuditOperation <> 'Delete'
+	WHERE  OAH.Order_id IS NULL
+
+	--UPDATE SCENARIO --  ORDER_AUDIT_HISTORY TABLE
+	;WITH CTE_ALL
+	AS
+	(
+	SELECT ROW_NUMBER() OVER(PARTITION BY ORDER_ID ORDER BY Dateloaded_OLD,Dateloaded_NEW DESC)AS RN
+	,* FROM #TEMP_ORDER_AUDIT_HISTORY WHERE AuditOperation <> 'Delete'
+	)
+
+	insert into ORDER_AUDIT_HISTORY
+	(
+		   [Order_id]
+		  ,[Buyer_name_NEW]
+		  ,[Status_id_NEW]
+		  ,[Shipping_address_NEW]
+		  ,[AuditOperation]	
+		  ,Dateloaded_NEW
+
+		  ,[Buyer_name_old]
+		  ,[Status_id_OLD]
+		  ,[Shipping_address_OLD]
+		  ,Dateloaded_OLD
+	)
+
+	SELECT  
+		  O.[Order_id]
+		  ,[Buyer_name]
+		  ,[Status_id]
+		  ,[Shipping_address]
+		  ,'Update' as [AuditOperation]	 
+		  ,Dateloaded 
+		  ,[Buyer_name_NEW]
+		  ,[Status_id_new]
+		  ,[Shipping_address_new]
+		  ,Dateloaded_new
+
+	FROM CTE_ALL c
+	inner join #TEMP_ORDER O ON O.Order_id = c.Order_id 
+	WHERE c.rn=1 and
+	(	   [Buyer_name_NEW] <> [Buyer_name] or
+		  [Status_id_NEW] <> [Status_id] or
+		  [Shipping_address_NEW] <> [Shipping_address] or
+		  Dateloaded_NEW  <> Dateloaded
+	)
+
+
+	--********************************** END OF ORDER_AUDIT_HISTORY TABLE ***************************
+
+
+	--********************************* ORDER_ITEMS_AUDIT_HISTORY TABLE ***************************************
+	INSERT INTO #TEMP_ORDER_ITEMS_AUDIT_HISTORY
+	(	  [Order_item_id]
+		  ,[Order_id]
+		  ,[Product_id]
+		  ,[Quantity_Old]
+		  ,[Quantity_New]
+		  ,[dateloaded_Old]
+		  ,[dateloaded_New]
+		  ,AuditOperation
+	)
+
+	SELECT 
+		  [Order_item_id]
+		  ,[Order_id]
+		  ,[Product_id]
+		  ,[Quantity_Old]
+		  ,[Quantity_New]
+		  ,[dateloaded_Old]
+		  ,[dateloaded_New]
+		  ,AuditOperation
+	FROM ORDER_ITEMS_AUDIT_HISTORY O
+
+	
+	INSERT INTO #TEMP_ORDER_ITEMS
+	(	  [Order_item_id]
+		  ,[Order_id]
+		  ,[Product_id]
+		  ,[Quantity]
+		  ,[dateloaded]
+	)
+
+	SELECT 
+		  [Order_item_id]
+		  ,[Order_id]
+		  ,[Product_id]
+		  ,[Quantity]
+		  ,[dateloaded]
+	FROM ORDER_ITEMS O
+
+
+	----INSERT SCENARIO --  ORDER_ITEMS_AUDIT_HISTORY TABLE
+	INSERT INTO ORDER_ITEMS_AUDIT_HISTORY
+	(
+		  [Order_item_id]
+		  ,[Order_id]
+		  ,[Product_id]
+		  ,[Quantity_New]
+		  ,[dateloaded_New]
+		  ,[AuditOperation]
+
+	)
+	SELECT 
+	  
+		  O.[Order_id]+'_'+O.[Product_id]
+		  ,O.[Order_id]
+		  ,O.[Product_id]
+		  ,[Quantity]
+		  ,Dateloaded
+		  ,'INSERT' as [AuditOperation]
+	FROM #TEMP_ORDER_ITEMS O
+	LEFT JOIN #TEMP_ORDER_ITEMS_AUDIT_HISTORY  OAH ON O.Order_item_id =OAH.Order_item_id   AND oah.AuditOperation <> 'Delete'
+	WHERE  OAH.Order_item_id IS NULL
+
+	----UPDATE SCENARIO --  ORDER_ITEMS_AUDIT_HISTORY TABLE
+	;WITH CTE_ALL
+	AS
+	(
+	SELECT ROW_NUMBER() OVER(PARTITION BY Order_item_id ORDER BY Dateloaded_OLD,Dateloaded_NEW DESC)AS RN
+	,* FROM #TEMP_ORDER_ITEMS_AUDIT_HISTORY WHERE AuditOperation <> 'Delete'
+	)
+
+	insert into ORDER_items_AUDIT_HISTORY
+	(
+		   [Order_item_id]
+		  ,[Order_id]
+		  ,[Product_id]
+		  ,[Quantity_New]
+		  ,[Quantity_old]
+		  ,[AuditOperation]	
+		  ,Dateloaded_NEW
+		  ,Dateloaded_OLD
+	)
+
+	SELECT  
+		   O.[Order_item_id]
+		  ,O.[Order_id]
+		  ,O.[Product_id]
+		  ,[Quantity]
+		  ,[Quantity_New]
+		  ,'Update' as [AuditOperation]	
+		  ,Dateloaded
+		  ,Dateloaded_NEW
+	FROM CTE_ALL c
+	inner join #TEMP_ORDER_ITEMS O ON O.[Order_item_id] = c.[Order_item_id] 
+	WHERE c.rn=1 and
+	(	   [Quantity_New] <> [Quantity] or
+		  Dateloaded_NEW  <> Dateloaded
+	)
+
+	---*****************************END OF  ORDER_ITEMS_AUDIT_HISTORY TABLE*********************
+
+END
+
+------------------------------------------------------------------------------------------------------------------------------------------------
+
+exec DBO.PR_ADD_UPDATE_AUDIT_HISTORY_TABLES;
